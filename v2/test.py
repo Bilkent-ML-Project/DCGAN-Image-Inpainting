@@ -1,68 +1,63 @@
 import torch
-from torchvision import transforms
-from torchvision.datasets import ImageFolder
-import numpy as np
-import matplotlib.pyplot as plt
-import torchvision.utils as vutils
-from dcganv2 import Generator
+import torch.nn as nn
+import torch.optim as optim
+from dcganv2 import Generator, Discriminator
 from PIL import Image
-
-# Root directory for dataset
-nz = 100
-ngpu = 1
-dataroot = "../processed/ims"
-image_size = 64
-device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
-
-def load_image(image_path):
-    transform = transforms.Compose([
-        transforms.Resize((64, 64)),
-        transforms.ToTensor(),
-    ])
-    image = Image.open(image_path).convert("RGB")
-    image = transform(image).unsqueeze(0)  # Add batch dimension
-
-    return image
-
-def load_generator(state_dict_path, ngpu):
-    generator = Generator(ngpu)  
-    state_dict = torch.load(state_dict_path)
-    generator.load_state_dict(state_dict)
-    return generator
+from torchvision.transforms import ToTensor
+import matplotlib.pyplot as plt
 
 
-def test_generator(generator, input_image):
-    with torch.no_grad():
-        output = generator(input_image)
+image_path = '../processed/ims/000001.jpg'  # Replace with your image path
+masked_image = Image.open(image_path)
+# Convert the image to a PyTorch tensor
+to_tensor = ToTensor()
+masked_image = to_tensor(masked_image)
 
-    return output
+mask_path = '../processed/masks/000001.jpg'  # Replace with your mask path
+mask = Image.open(mask_path)
+# Convert the mask to a PyTorch tensor
+to_tensor = ToTensor()
+mask = to_tensor(mask)
 
-def display_images(input_image, generated_image):
-    input_image = input_image.squeeze(0).permute(1, 2, 0).numpy()
-    generated_image = generated_image.squeeze(0).permute(1, 2, 0).numpy()
+# Load the pre-trained models
+generator = Generator(1)
+generator.load_state_dict(torch.load('./run1/generator.pth'))
+generator.eval()
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+discriminator = Discriminator(1)
+discriminator.load_state_dict(torch.load('./run1/discriminator.pth'))
+discriminator.eval()
 
-    axes[0].imshow(input_image)
-    axes[0].set_title("Input Image")
-    axes[0].axis("off")
+# Generate inpainting candidates
+num_candidates = 1000
+latent_dim = 100  # Adjust based on your generator's input size
+noise = torch.randn(num_candidates, latent_dim, 1, 1)
+inpainting_candidates = generator(noise)
 
-    axes[1].imshow(generated_image)
-    axes[1].set_title("Generated Image")
-    axes[1].axis("off")
+# Assuming masked_image is your original image
+content_loss_fn = nn.MSELoss()
 
-    plt.show()
+print(inpainting_candidates[0].shape)
+print(masked_image.shape)
+# Calculate content loss for each candidate
+content_losses = [content_loss_fn(candidate, masked_image) for candidate in inpainting_candidates]
 
+# Select the candidate with the lowest content loss
+best_candidate_index = torch.argmin(torch.tensor(content_losses))
 
-def main():
-    # Load an image from the dataset
-    image_path = dataroot + "/000001.jpg"
+# Retrieve the best inpainting candidate
+best_candidate = inpainting_candidates[best_candidate_index]
 
-    # Load image
-    img = load_image(image_path)
-    netG = load_generator("./run1/generator.pth", ngpu)
-    output = test_generator(netG, img)
-    display_images(img, output)
+# Inpaint the masked image with the best candidate
+inpainted_image = masked_image * (1- mask) + best_candidate *  mask
 
-if __name__ == "__main__":
-    main()
+# Visualize the original image, mask, and the best inpainting candidate
+fig, axs = plt.subplots(1, 3, figsize=(15, 15))
+axs[0].imshow(masked_image.permute(1, 2, 0))
+axs[0].set_title("Original Image")
+axs[1].imshow(mask.permute(1, 2, 0))
+axs[1].set_title("Mask")
+axs[2].imshow(inpainted_image.permute(1, 2, 0).detach().numpy())
+axs[2].set_title("Inpainting Candidate")
+
+plt.show()
