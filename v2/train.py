@@ -7,6 +7,7 @@ from torchvision.datasets import ImageFolder
 from dcganv2 import Generator, weights_init, Discriminator
 import torchvision.utils as vutils
 import matplotlib.pyplot as plt
+import os
 from torch.utils.data import random_split
 
 # Root directory for dataset
@@ -19,8 +20,42 @@ num_epochs = 20
 lr = 0.0002
 beta1 = 0.5
 ngpu = 1
+run_name = "run1"
 
 torch.manual_seed(42)
+
+def save_checkpoint(epoch, generator, discriminator, optimizer_g, optimizer_d):
+    os.makedirs(run_name, exist_ok=True)
+
+    checkpoint_path_latest = f"{run_name}/checkpoint_latest.pth"
+    checkpoint_path_epoch = f"{run_name}/checkpoint_epoch_{epoch - 1}.pth"
+
+    if epoch > 1:
+        # Rename the previous checkpoint file from latest
+        os.rename(checkpoint_path_latest, checkpoint_path_epoch)
+
+    # Save the latest checkpoint
+    torch.save({
+        'epoch': epoch,
+        'generator_state_dict': generator.state_dict(),
+        'discriminator_state_dict': discriminator.state_dict(),
+        'optimizer_g_state_dict': optimizer_g.state_dict(),
+        'optimizer_d_state_dict': optimizer_d.state_dict(),
+    }, checkpoint_path_latest)
+
+
+def load_checkpoint(generator, discriminator, optimizer_g, optimizer_d, checkpoint_path):
+    try:
+        checkpoint = torch.load(checkpoint_path)
+        epoch = checkpoint['epoch']
+        generator.load_state_dict(checkpoint['generator_state_dict'])
+        discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
+        optimizer_g.load_state_dict(checkpoint['optimizer_g_state_dict'])
+        optimizer_d.load_state_dict(checkpoint['optimizer_d_state_dict'])
+    except FileNotFoundError:
+        print("Checkpoint file not found. Starting from epoch 0.")
+        epoch = 0
+    return epoch
 
 def load_data(subset_size=0.2, train_ratio=0.8):
     # Create the dataset by loading images from the folder
@@ -89,9 +124,13 @@ def main():
     G_losses = []
     D_losses = []
     iters = 0
+
+    checkpoint_path = f"{run_name}/checkpoint_latest.pth"  # Change to the desired checkpoint file
+    start_epoch = load_checkpoint(netG, netD, optimizerG, optimizerD, checkpoint_path)
+
     print("Starting Training Loop...")
     # For each epoch
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs):
         # For each batch in the dataloader
         for i, data in enumerate(train_loader, 0):
 
@@ -158,6 +197,12 @@ def main():
 
             iters += 1
 
+        save_checkpoint(epoch, netG, netD, optimizerG, optimizerD)
+        
+
+    # Save models
+    torch.save(netG.state_dict(), f"{run_name}/generator.pth")
+    torch.save(netD.state_dict(), f"{run_name}/discriminator.pth")
 
     plt.figure(figsize=(10,5))
     plt.title("Generator and Discriminator Loss During Training")
@@ -177,14 +222,13 @@ def main():
     plt.subplot(1,2,1)
     plt.axis("off")
     plt.title("Real Images")
-    plt.imshow(np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=5, normalize=True).cpu(),(1,2,0)))
+    plt.imsave(f"{run_name}/real_images.png", np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=5, normalize=True).cpu(),(1,2,0)))
 
     # Plot the fake images from the last epoch
     plt.subplot(1,2,2)
     plt.axis("off")
     plt.title("Fake Images")
-    plt.imshow(np.transpose(img_list[-1],(1,2,0)))
-    plt.show()
+    plt.imsave(f"{run_name}/fake_images.png", np.transpose(img_list[-1],(1,2,0)))
 
 if __name__ == "__main__":
     main()
