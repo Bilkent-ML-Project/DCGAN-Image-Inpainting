@@ -9,6 +9,7 @@ import torchvision.utils as vutils
 import matplotlib.pyplot as plt
 import os
 from torch.utils.data import random_split
+from utils import load_checkpoint, save_checkpoint
 
 # Root directory for dataset
 dataroot = "../data/img_align_celeba"
@@ -16,7 +17,7 @@ workers = 2
 batch_size = 128
 image_size = 64
 nz = 100
-num_epochs = 20
+num_epochs = 1
 lr = 0.0002
 beta1 = 0.5
 ngpu = 1
@@ -24,38 +25,6 @@ run_name = "run1"
 
 torch.manual_seed(42)
 
-def save_checkpoint(epoch, generator, discriminator, optimizer_g, optimizer_d):
-    os.makedirs(run_name, exist_ok=True)
-
-    checkpoint_path_latest = f"{run_name}/checkpoint_latest.pth"
-    checkpoint_path_epoch = f"{run_name}/checkpoint_epoch_{epoch - 1}.pth"
-
-    if epoch > 1:
-        # Rename the previous checkpoint file from latest
-        os.rename(checkpoint_path_latest, checkpoint_path_epoch)
-
-    # Save the latest checkpoint
-    torch.save({
-        'epoch': epoch,
-        'generator_state_dict': generator.state_dict(),
-        'discriminator_state_dict': discriminator.state_dict(),
-        'optimizer_g_state_dict': optimizer_g.state_dict(),
-        'optimizer_d_state_dict': optimizer_d.state_dict(),
-    }, checkpoint_path_latest)
-
-
-def load_checkpoint(generator, discriminator, optimizer_g, optimizer_d, checkpoint_path):
-    try:
-        checkpoint = torch.load(checkpoint_path)
-        epoch = checkpoint['epoch']
-        generator.load_state_dict(checkpoint['generator_state_dict'])
-        discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
-        optimizer_g.load_state_dict(checkpoint['optimizer_g_state_dict'])
-        optimizer_d.load_state_dict(checkpoint['optimizer_d_state_dict'])
-    except FileNotFoundError:
-        print("Checkpoint file not found. Starting from epoch 0.")
-        epoch = 0
-    return epoch
 
 def load_data(subset_size=0.2, train_ratio=0.8):
     # Create the dataset by loading images from the folder
@@ -67,15 +36,6 @@ def load_data(subset_size=0.2, train_ratio=0.8):
                                 transforms.ToTensor(),
                                 transforms.Normalize((0.5, 0.5, 0.5), 
                                                      (0.5, 0.5, 0.5)),
-                            ]))
-    
-    
-    celeba_dataset = ImageFolder(root=dataroot,
-                            transform=transforms.Compose([
-                                transforms.Resize(image_size),
-                                transforms.CenterCrop(image_size),
-                                transforms.ToTensor(),
-                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                             ]))
 
     # Create a subset of the dataset with only {subset_size} of the data
@@ -197,7 +157,7 @@ def main():
 
             iters += 1
 
-        save_checkpoint(epoch, netG, netD, optimizerG, optimizerD)
+        save_checkpoint(epoch, netG, netD, optimizerG, optimizerD, run_name)
         
 
     # Save models
