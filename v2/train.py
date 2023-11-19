@@ -43,7 +43,7 @@ def create_cur_run_dir():
 
     print("Directory path is", directory_path)
 
-    os.mkdir(directory_path, exist_ok=False)
+    os.mkdir(directory_path)
 
     return directory_path
 
