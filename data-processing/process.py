@@ -10,6 +10,8 @@ def process_directory(directory, square_size=50):
     masks_dir = "./processed/masks/"
     ims_dir = "./processed/ims/"
     os.makedirs(processed_dir, exist_ok=True)  # Create the processed directory if it doesn't exist
+    os.makedirs(masks_dir, exist_ok=True)  # Create the processed directory if it doesn't exist
+    os.makedirs(ims_dir, exist_ok=True)  # Create the processed directory if it doesn't exist
 
     count = 0  # Initialize a counter to track progress
 
@@ -31,7 +33,7 @@ def process_directory(directory, square_size=50):
                 print(f"Processed {count} images")
 
 # Specify the directory containing images
-input_directory = "./archive/img_align_celeba/img_align_celeba"
+input_directory = "C:\\Users\\tolgapc\\Desktop\\DCGAN\\DCGAN-Image-Inpainting\\data\\img_align_celeba\\img_align_celeba"
 
 # Process the images in the directory
 process_directory(input_directory)
