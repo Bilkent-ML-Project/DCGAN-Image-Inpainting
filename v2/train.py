@@ -26,7 +26,7 @@ run_name = "run1"
 torch.manual_seed(42)
 
 
-def create_run_dir():
+def create_cur_run_dir():
     current_directory = os.getcwd()
     run_directories = [d for d in os.listdir(current_directory) if os.path.isdir(os.path.join(current_directory, d)) and d.startswith("run_")]
 
@@ -38,10 +38,13 @@ def create_run_dir():
     highest_run_number = max(run_numbers)
 
     directory_name = f"run_{highest_run_number + 1}"
+    directory_path = os.path.join(current_directory, directory_name)
 
-    os.mkdir(directory_name, exist_ok=False)
+    print("Directory path is", directory_path)
 
-    return directory_name
+    os.mkdir(directory_path, exist_ok=False)
+
+    return directory_path
 
 
 def load_data(subset_size=0.2, train_ratio=0.8):
@@ -79,7 +82,7 @@ def main():
     device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
 
     # Create the run directory
-    directory = create_run_dir()
+    directory = create_cur_run_dir()
 
     print("Using device: ", device)
 
