@@ -205,36 +205,38 @@ def main():
 
         with torch.no_grad():
             for i, data in tqdm(enumerate(val_loader), total=len(val_loader), desc="Validation"):
-                real_images, _ = data
-                real_images = real_images.to(device)
-
-                real_labels = torch.full((real_images.size(0),), 1, device=device, dtype=torch.float32)
-                fake_labels = torch.full((real_images.size(0),), 0, device=device, dtype=torch.float32)
+                real_image = data[0].to(device)
+                b_size = real_image.size(0)
+                label = torch.full((b_size,), real_label, dtype=torch.float, device=device)
 
                 # Forward pass real batch through Discriminator
-                output_real = netD(real_images)
-                loss_real = criterion(output_real, real_labels)
-                val_loss_d += loss_real.item()
+                output = netD(real_image).view(-1)
+                lossD_real = criterion(output, label)
+                val_loss_d += lossD_real.item()
 
-                # Generate fake images
-                noise = torch.randn(real_images.size(0), nz, 1, 1, device=device)
-                fake_images = netG(noise)
-
-                # Forward pass fake batch through Discriminator
-                output_fake = netD(fake_images.detach())
-                loss_fake = criterion(output_fake, fake_labels)
-                val_loss_d += loss_fake.item()
+                # Generate batch of latent vectors
+                noise = torch.randn(b_size, nz, 1, 1, device=device)
+                # Generate fake image batch with G
+                fake = netG(noise)
+                label.fill_(fake_label)
+                # Classify all fake batch with D
+                output = netD(fake.detach()).view(-1)
+                # Calculate D's loss on the all-fake batch
+                errD_fake = criterion(output, label)
+                val_loss_d += errD_fake.item()
 
                 # Generator loss on validation not used for training generator
-                output_generated = netD(fake_images)
-                loss_generator = criterion(output_generated, real_labels)
-                val_loss_g += loss_generator.item()
+                label.fill_(real_label)
+                output = netD(fake).view(-1)
+                errG = criterion(output, label)
+                val_loss_g += errG.item()
+
                 
                 # log statistics
                 if i % 100 == 0:
-                    log(f"[Epoch {epoch}/{start_epoch + num_epochs}] [Batch {i}/{len(val_loader)}] "
-                            f"[D Loss Real: {loss_real.item():.4f}, D Loss Fake: {loss_fake.item():.4f}] "
-                            f"[G Loss: {loss_generator.item():.4f}]")
+                    log('[Validation][%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
+                        % (epoch, num_epochs, i, len(val_loader),
+                            errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
 
         val_loss_d /= len(val_loader)
         val_loss_g /= len(val_loader)
