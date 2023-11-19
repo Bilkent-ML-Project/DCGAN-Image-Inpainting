@@ -30,14 +30,15 @@ def create_cur_run_dir():
     current_directory = os.getcwd()
     run_directories = [d for d in os.listdir(current_directory) if os.path.isdir(os.path.join(current_directory, d)) and d.startswith("run_")]
 
-    if not run_directories:
-        return None  # No matching directories found
+    if run_directories:
+        # Extract the run numbers and find the maximum
+        run_numbers = [int(d.split("_")[1]) for d in run_directories]
+        highest_run_number = max(run_numbers)
+        directory_name = f"run_{highest_run_number + 1}"
+    else:
+        directory_name = f"run_0"
+        
 
-    # Extract the run numbers and find the maximum
-    run_numbers = [int(d.split("_")[1]) for d in run_directories]
-    highest_run_number = max(run_numbers)
-
-    directory_name = f"run_{highest_run_number + 1}"
     directory_path = os.path.join(current_directory, directory_name)
 
     print("Directory path is", directory_path)
