@@ -15,11 +15,10 @@ def load_checkpoint(generator, discriminator, optimizer_g, optimizer_d, checkpoi
     return epoch
 
 
-def save_checkpoint(epoch, generator, discriminator, optimizer_g, optimizer_d, run_name):
-    os.makedirs(run_name, exist_ok=True)
+def save_checkpoint(epoch, generator, discriminator, optimizer_g, optimizer_d, directory):
 
-    checkpoint_path_latest = f"{run_name}/checkpoint_latest.pth"
-    checkpoint_path_epoch = f"{run_name}/checkpoint_epoch_{epoch - 1}.pth"
+    checkpoint_path_latest = f"{directory}/checkpoint_latest.pth"
+    checkpoint_path_epoch = f"{directory}/checkpoint_epoch_{epoch - 1}.pth"
 
     if epoch > 1:
         # Rename the previous checkpoint file from latest

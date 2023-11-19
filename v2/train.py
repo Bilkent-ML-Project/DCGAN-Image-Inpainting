@@ -26,6 +26,22 @@ run_name = "run1"
 torch.manual_seed(42)
 
 
+def create_run_dir():
+    current_directory = os.getcwd()
+    run_directories = [d for d in os.listdir(current_directory) if os.path.isdir(os.path.join(current_directory, d)) and d.startswith("run_")]
+
+    if not run_directories:
+        return None  # No matching directories found
+
+    # Extract the run numbers and find the maximum
+    run_numbers = [int(d.split("_")[1]) for d in run_directories]
+    highest_run_number = max(run_numbers)
+
+    directory = os.mkdir(f"run_{highest_run_number + 1}", exist_ok=False)
+
+    return directory
+
+
 def load_data(subset_size=0.2, train_ratio=0.8):
     # Create the dataset by loading images from the folder
     print("Loading data...")
@@ -55,6 +71,10 @@ def load_data(subset_size=0.2, train_ratio=0.8):
 
 def main():
     device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
+
+    # Create the run directory
+    directory = create_run_dir()
+
     print("Using device: ", device)
 
     train_dataset, val_dataset = load_data(subset_size=0.2, train_ratio=0.8)
@@ -85,7 +105,7 @@ def main():
     D_losses = []
     iters = 0
 
-    checkpoint_path = f"{run_name}/checkpoint_latest.pth"  # Change to the desired checkpoint file
+    checkpoint_path = f"{directory}/checkpoint_latest.pth"  # Change to the desired checkpoint file
     start_epoch = load_checkpoint(netG, netD, optimizerG, optimizerD, checkpoint_path)
 
     print("Starting Training Loop...")
@@ -157,12 +177,12 @@ def main():
 
             iters += 1
 
-        save_checkpoint(epoch, netG, netD, optimizerG, optimizerD, run_name)
+        save_checkpoint(epoch, netG, netD, optimizerG, optimizerD, directory)
         
 
     # Save models
-    torch.save(netG.state_dict(), f"{run_name}/generator.pth")
-    torch.save(netD.state_dict(), f"{run_name}/discriminator.pth")
+    torch.save(netG.state_dict(), f"{directory}/generator.pth")
+    torch.save(netD.state_dict(), f"{directory}/discriminator.pth")
 
     plt.figure(figsize=(10,5))
     plt.title("Generator and Discriminator Loss During Training")
@@ -182,13 +202,13 @@ def main():
     plt.subplot(1,2,1)
     plt.axis("off")
     plt.title("Real Images")
-    plt.imsave(f"{run_name}/real_images.png", np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=5, normalize=True).cpu(),(1,2,0)))
+    plt.imsave(f"{directory}/real_images.png", np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=5, normalize=True).cpu(),(1,2,0)))
 
     # Plot the fake images from the last epoch
     plt.subplot(1,2,2)
     plt.axis("off")
     plt.title("Fake Images")
-    plt.imsave(f"{run_name}/fake_images.png", np.transpose(img_list[-1],(1,2,0)))
+    plt.imsave(f"{directory}/fake_images.png", np.transpose(img_list[-1],(1,2,0)))
 
 if __name__ == "__main__":
     main()
