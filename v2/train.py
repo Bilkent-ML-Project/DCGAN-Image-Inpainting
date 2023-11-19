@@ -12,7 +12,7 @@ from torch.utils.data import random_split
 from utils import load_checkpoint, save_checkpoint
 
 # Root directory for dataset
-dataroot = "../data/img_align_celeba"
+dataroot = "../data/"
 workers = 2
 batch_size = 128
 image_size = 64
@@ -37,9 +37,11 @@ def create_run_dir():
     run_numbers = [int(d.split("_")[1]) for d in run_directories]
     highest_run_number = max(run_numbers)
 
-    directory = os.mkdir(f"run_{highest_run_number + 1}", exist_ok=False)
+    directory_name = f"run_{highest_run_number + 1}"
 
-    return directory
+    os.mkdir(directory_name, exist_ok=False)
+
+    return directory_name
 
 
 def load_data(subset_size=0.2, train_ratio=0.8):
@@ -70,6 +72,10 @@ def load_data(subset_size=0.2, train_ratio=0.8):
 
 
 def main():
+
+    # List cuda devices
+    print("Available devices: ", torch.cuda.device_count())
+
     device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
 
     # Create the run directory
