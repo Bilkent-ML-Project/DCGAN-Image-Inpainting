@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import os
 from torch.utils.data import random_split
 from utils import load_checkpoint, save_checkpoint
+from tqdm import tqdm
 
 # Root directory for dataset
 dataroot = "../data/"
@@ -24,6 +25,8 @@ ngpu = 1
 run_name = "run1"
 
 torch.manual_seed(42)
+
+directory = None
 
 
 def create_cur_run_dir():
@@ -41,16 +44,22 @@ def create_cur_run_dir():
 
     directory_path = os.path.join(current_directory, directory_name)
 
-    print("Directory path is", directory_path)
+    log("Directory path is" + directory_path)
 
     os.mkdir(directory_path)
+
+    # Create log.txt in directory path
+    with open(f"{directory_path}/log.txt", "w") as f:
+        f.write("")
+
+
 
     return directory_path
 
 
 def load_data(subset_size=0.2, train_ratio=0.8):
     # Create the dataset by loading images from the folder
-    print("Loading data...")
+    log("Loading data...")
     celeba_dataset = ImageFolder(root=dataroot,
                             transform=transforms.Compose([
                                 transforms.Resize(image_size),
@@ -61,12 +70,12 @@ def load_data(subset_size=0.2, train_ratio=0.8):
                             ]))
 
     # Create a subset of the dataset with only {subset_size} of the data
-    print(f"Creating a subset of the dataset with only {subset_size} of the data...")
+    log(f"Creating a subset of the dataset with only {subset_size} of the data...")
     subset_indices = torch.randperm(len(celeba_dataset))[:int(subset_size * len(celeba_dataset))]
     subset_dataset = torch.utils.data.Subset(celeba_dataset, subset_indices)
         
     # Split the dataset into training and validation sets 
-    print(f"Splitting the dataset into training and validation sets with a ratio of {train_ratio}...")
+    log(f"Splitting the dataset into training and validation sets with a ratio of {train_ratio}...")
     num_train = int(len(subset_dataset) * train_ratio)
     num_val = len(subset_dataset) - num_train
 
@@ -78,22 +87,24 @@ def load_data(subset_size=0.2, train_ratio=0.8):
 def main():
 
     # List cuda devices
-    print("Available devices: ", torch.cuda.device_count())
+    log("Available devices: " + str(torch.cuda.device_count()))
 
     device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
 
     # Create the run directory
+    global directory
     directory = create_cur_run_dir()
 
-    print("Using device: ", device)
-
+    log("Using device: " + str(device))
+    
     train_dataset, val_dataset = load_data(subset_size=0.2, train_ratio=0.8)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True, num_workers=4)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=64, shuffle=True, num_workers=4)
 
     # Decide which device we want to run on
 
     # Create the generator and discriminator
-    print("Initializing generator and discriminator...")
+    log("Initializing generator and discriminator...")
     netG = Generator(ngpu).to(device)
     netG.apply(weights_init)
 
@@ -118,11 +129,11 @@ def main():
     checkpoint_path = f"{directory}/checkpoint_latest.pth"  # Change to the desired checkpoint file
     start_epoch = load_checkpoint(netG, netD, optimizerG, optimizerD, checkpoint_path)
 
-    print("Starting Training Loop...")
+    log("Starting Training Loop...")
     # For each epoch
     for epoch in range(start_epoch, num_epochs):
         # For each batch in the dataloader
-        for i, data in enumerate(train_loader, 0):
+        for i, data in tqdm(enumerate(train_loader), total=len(train_loader)):
 
             ## Train with all-real batch
             netD.zero_grad()
@@ -171,7 +182,7 @@ def main():
 
             # Output training stats
             if i % 50 == 0:
-                print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
+                log('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
                     % (epoch, num_epochs, i, len(train_loader),
                         errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
 
@@ -186,7 +197,51 @@ def main():
                 img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
 
             iters += 1
+        netG.eval()
+        netD.eval()
 
+        val_loss_d = 0.0
+        val_loss_g = 0.0
+
+        with torch.no_grad():
+            for i, data in tqdm(enumerate(val_loader), total=len(val_loader), desc="Validation"):
+                real_images, _ = data
+                real_images = real_images.to(device)
+
+                real_labels = torch.full((real_images.size(0),), 1, device=device, dtype=torch.float32)
+                fake_labels = torch.full((real_images.size(0),), 0, device=device, dtype=torch.float32)
+
+                # Forward pass real batch through Discriminator
+                output_real = netD(real_images)
+                loss_real = criterion(output_real, real_labels)
+                val_loss_d += loss_real.item()
+
+                # Generate fake images
+                noise = torch.randn(real_images.size(0), nz, 1, 1, device=device)
+                fake_images = netG(noise)
+
+                # Forward pass fake batch through Discriminator
+                output_fake = netD(fake_images.detach())
+                loss_fake = criterion(output_fake, fake_labels)
+                val_loss_d += loss_fake.item()
+
+                # Generator loss on validation not used for training generator
+                output_generated = netD(fake_images)
+                loss_generator = criterion(output_generated, real_labels)
+                val_loss_g += loss_generator.item()
+                
+                # log statistics
+                if i % 100 == 0:
+                    log(f"[Epoch {epoch}/{start_epoch + num_epochs}] [Batch {i}/{len(val_loader)}] "
+                            f"[D Loss Real: {loss_real.item():.4f}, D Loss Fake: {loss_fake.item():.4f}] "
+                            f"[G Loss: {loss_generator.item():.4f}]")
+
+        val_loss_d /= len(val_loader)
+        val_loss_g /= len(val_loader)
+        
+        log(f"[Epoch {epoch}/{start_epoch + num_epochs}] [Validation END]"
+                f"[D Avg Loss {val_loss_d:4f}] "
+                f"[G Avg Loss: {val_loss_g:.4f}]")
         save_checkpoint(epoch, netG, netD, optimizerG, optimizerD, directory)
         
 
@@ -194,31 +249,38 @@ def main():
     torch.save(netG.state_dict(), f"{directory}/generator.pth")
     torch.save(netD.state_dict(), f"{directory}/discriminator.pth")
 
-    plt.figure(figsize=(10,5))
-    plt.title("Generator and Discriminator Loss During Training")
-    plt.plot(G_losses,label="G")
-    plt.plot(D_losses,label="D")
-    plt.xlabel("iterations")
-    plt.ylabel("Loss")
-    plt.legend()
-    plt.show()
+    # plt.figure(figsize=(10,5))
+    # plt.title("Generator and Discriminator Loss During Training")
+    # plt.plot(G_losses,label="G")
+    # plt.plot(D_losses,label="D")
+    # plt.xlabel("iterations")
+    # plt.ylabel("Loss")
+    # plt.legend()
+    # plt.show()
 
 
     # Grab a batch of real images from the train_loader
-    real_batch = next(iter(train_loader))
+    # real_batch = next(iter(train_loader))
 
-    # Plot the real images
-    plt.figure(figsize=(15,15))
-    plt.subplot(1,2,1)
-    plt.axis("off")
-    plt.title("Real Images")
-    plt.imsave(f"{directory}/real_images.png", np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=5, normalize=True).cpu(),(1,2,0)))
+    # # Plot the real images
+    # plt.figure(figsize=(15,15))
+    # plt.subplot(1,2,1)
+    # plt.axis("off")
+    # plt.title("Real Images")
+    # plt.imsave(f"{directory}/real_images.png", np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=5, normalize=True).cpu(),(1,2,0)))
 
-    # Plot the fake images from the last epoch
-    plt.subplot(1,2,2)
-    plt.axis("off")
-    plt.title("Fake Images")
-    plt.imsave(f"{directory}/fake_images.png", np.transpose(img_list[-1],(1,2,0)))
+    # # Plot the fake images from the last epoch
+    # plt.subplot(1,2,2)
+    # plt.axis("off")
+    # plt.title("Fake Images")
+    # plt.imsave(f"{directory}/fake_images.png", np.transpose(img_list[-1],(1,2,0)))
+
+
+def log(message):
+    print(message)
+    if directory:
+        with open(f"{directory}/log.txt", "a") as f:
+            f.write(f"{message}\n")
 
 if __name__ == "__main__":
     main()
