@@ -1,6 +1,0 @@
-Assigned networks to devices.
-Checkpoint file not found. Starting from epoch 0.
-Epoch 0/50
-[Epoch 0/50] [Batch 0/254] [D Loss Real: 1.4272, D Loss Fake: 1.5577] [G Loss: 5.4605]
-[Epoch 0/50] [Batch 100/254] [D Loss Real: 0.0273, D Loss Fake: 0.0024] [G Loss: 13.9465]
-[Epoch 0/50] [Batch 200/254] [D Loss Real: 0.0008, D Loss Fake: 0.0000] [G Loss: 42.3269]
